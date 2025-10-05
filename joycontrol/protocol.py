@@ -467,6 +467,7 @@ class ControllerProtocol(BaseProtocol):
         await self.write(input_report)
 
     async def _command_set_nfc_ir_mcu_config(self, sub_command_data):
+        # TODO NFC
         input_report = InputReport()
         input_report.set_input_report_id(0x21)
         input_report.set_misc()
@@ -498,6 +499,7 @@ class ControllerProtocol(BaseProtocol):
         await self.write(input_report)
 
     async def _command_set_nfc_ir_mcu_state(self, sub_command_data):
+        # TODO NFC
         input_report = InputReport()
         input_report.set_input_report_id(0x21)
         input_report.set_misc()
