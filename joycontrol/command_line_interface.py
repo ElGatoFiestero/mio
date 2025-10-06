@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import logging
 import shlex
@@ -101,10 +102,16 @@ class ControllerCLI(CLI):
     def __init__(self, controller_state: ControllerState):
         super().__init__()
         self.controller_state = controller_state
+        # --- NUEVO: registro de tareas "mendez" por botón ---
+        self._mendez_tasks = {}
 
     async def cmd_help(self):
         print('Button commands:')
         print(', '.join(self.controller_state.button_state.get_available_buttons()))
+        print()
+        print('mendez <boton> <intervalo_ms>  - inicia un bucle que pulsa <boton> cada <intervalo_ms> ms')
+        print('mendez_stop <boton>            - detiene el bucle del <boton>')
+        print('mendez_list                    - lista bucles activos')
         print()
         await super().cmd_help()
 
@@ -158,6 +165,77 @@ class ControllerCLI(CLI):
         else:
             raise ValueError('Value of side must be "l", "left" or "r", "right"')
 
+    # ---------------- NUEVO: comandos "mendez" ----------------
+    async def _mendez_worker(self, button: str, interval_ms: int):
+        """
+        Pulsa 'button' indefinidamente cada 'interval_ms' milisegundos
+        hasta que se cancele la task correspondiente.
+        """
+        try:
+            available = self.controller_state.button_state.get_available_buttons()
+            if button not in available:
+                print(f'Botón "{button}" no es válido. Disponibles: {", ".join(sorted(available))}')
+                return
+
+            # Normaliza intervalo (mínimo 1 ms)
+            interval = max(1, int(interval_ms)) / 1000.0
+
+            while True:
+                # Pulso corto (0.1s por defecto en button_push), luego espera el intervalo
+                await button_push(self.controller_state, button)
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            # Cancelación silenciosa
+            pass
+        except NotConnectedError:
+            print('Conexión perdida durante mendez; deteniendo bucle.')
+        except Exception as e:
+            print(f'Error en mendez({button}): {e}')
+        finally:
+            # Limpieza del registro si aplica
+            task = self._mendez_tasks.get(button)
+            if task and task.done():
+                self._mendez_tasks.pop(button, None)
+
+    async def cmd_mendez(self, button: str, interval_ms: str):
+        """
+        mendez <boton> <intervalo_ms>
+        Inicia un bucle infinito que pulsa <boton> cada <intervalo_ms> ms.
+        """
+        if button in self._mendez_tasks and not self._mendez_tasks[button].done():
+            return f'Ya hay un mendez activo para "{button}". Usa: mendez_stop {button}'
+
+        try:
+            interval_int = int(interval_ms)
+        except ValueError:
+            raise ValueError('intervalo_ms debe ser un entero (milisegundos).')
+
+        task = asyncio.create_task(self._mendez_worker(button, interval_int), name=f'mendez:{button}')
+        self._mendez_tasks[button] = task
+        return f'Iniciado mendez para "{button}" cada {interval_int} ms.'
+
+    async def cmd_mendez_stop(self, button: str):
+        """
+        mendez_stop <boton>
+        Detiene el bucle "mendez" del <boton>.
+        """
+        task = self._mendez_tasks.get(button)
+        if not task or task.done():
+            return f'No hay mendez activo para "{button}".'
+        task.cancel()
+        return f'Detenido mendez para "{button}".'
+
+    async def cmd_mendez_list(self):
+        """
+        mendez_list
+        Lista los bucles mendez activos.
+        """
+        activos = [b for b, t in self._mendez_tasks.items() if t and not t.done()]
+        if not activos:
+            return 'No hay mendez activos.'
+        return 'Mendez activos: ' + ', '.join(sorted(activos))
+    # ----------------------------------------------------------
+
     async def run(self):
         while True:
             user_input = await ainput(prompt='cmd >> ')
@@ -170,6 +248,10 @@ class ControllerCLI(CLI):
                 cmd, *args = shlex.split(command)
 
                 if cmd == 'exit':
+                    # Al salir, cancelar todos los mendez activos
+                    for b, t in list(self._mendez_tasks.items()):
+                        if t and not t.done():
+                            t.cancel()
                     return
 
                 available_buttons = self.controller_state.button_state.get_available_buttons()
@@ -200,4 +282,8 @@ class ControllerCLI(CLI):
                     await self.controller_state.send()
                 except NotConnectedError:
                     logger.info('Connection was lost.')
+                    # Si se perdió conexión, cancelar también los mendez activos
+                    for b, t in list(self._mendez_tasks.items()):
+                        if t and not t.done():
+                            t.cancel()
                     return
