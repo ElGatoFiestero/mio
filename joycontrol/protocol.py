@@ -475,13 +475,16 @@ class ControllerProtocol(BaseProtocol):
         input_report.set_ack(0xA0)
         input_report.reply_to_subcommand_id(SubCommand.SET_NFC_IR_MCU_CONFIG.value)
 
+  
         self._mcu.update_status()
         data = list(bytes(self._mcu)[0:34])
         crc = crc8()
         crc.update(bytes(data[:-1]))
         checksum = crc.digest()
         data[-1] = ord(checksum)
-    
+
+        data = [1, 0, 255, 0, 8, 0, 27, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200]
+
         for i in range(len(data)):
             input_report.data[16+i] = data[i]
         
