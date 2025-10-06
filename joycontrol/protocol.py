@@ -482,9 +482,7 @@ class ControllerProtocol(BaseProtocol):
         crc.update(bytes(data[:-1]))
         checksum = crc.digest()
         data[-1] = ord(checksum)
-
-        data = [1, 0, 255, 0, 8, 0, 27, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200]
-
+    
         for i in range(len(data)):
             input_report.data[16+i] = data[i]
         
