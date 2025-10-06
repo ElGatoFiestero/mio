@@ -167,8 +167,8 @@ class ControllerProtocol(BaseProtocol):
                             reply_send = await self._reply_to_sub_command(report)
                         elif output_report_id == OutputReportID.REQUEST_IR_NFC_MCU:
                             # TODO: This does not reply anything
-                            # reply_send = await self._reply_to_ir_nfc_mcu(report)
-                            await self._reply_to_ir_nfc_mcu(report)
+                            reply_send = await self._reply_to_ir_nfc_mcu(report)
+                            #await self._reply_to_ir_nfc_mcu(report)
                         else:
                             logger.warning(f'Report unknown output report "{output_report_id}" - IGNORE')
                     except ValueError as v_err:
